@@ -3,59 +3,71 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-
-/* To-do List */
-/* 시작 부분 */
-// 화면에 "START!" 문구가 나오며 게임을 시작한다.
-// 게임 시작하고 종료될 때까지 화면 좌측 상단에는 등수가 나온다.
-// 플레이어가 어느 지점에 도달하면 맵 어디까지 왔는지 Map Bar에서 보여준다.
-
-/* 플레이어 동작 */
-// 무조건 높은 곳(게임 처음, 트램펄린 점프 등)에서 착지하면 부스터가 생성된다. (부스터 생성되면 몇초 동안 빠르게 달리기 가능)
-// 플레이어 체력이 다 없어질 경우 플레이어는 헥헥거리며 3초정도 멈춘다.
-// 중간에 적 또는 장애물과 부딪히면 뒤로 튕겨져 나간다.
-// 플레이어의 분노게이지가 Full로 찰 경우, 부스터가 생성된다.
-// 만약 높은 곳에서 떨어질 경우, 떨어지기 직전 위치에 플레이어가 이동된다.
-// 트램펄린을 만나면 자동으로 아주 높게 점프한다. (이때 방향전환만 가능)
-// 후반부 양탄자 구간에서는 양탄자를 타며 지니를 피해야한다. (이때 방향전환만 가능)
-
-/* 종료 부분 */
-// 게임 종료 후에 러닝 타임 얼마나 걸렸는지 보여준다.
-
-
 public class player : MonoBehaviour
 {
+    public enum State
+    {
+        Idle,
+        Run,
+        Jumping,
+        ReactBackwards,
+        InjuredIdle,
+        Dancing,
+    }
+    public State state;
+    public Animator ani;
+    AudioManager theAudioManager;
+
     public float jumpPower = 3.5f;
     public float gravity = -8f;
-    public float speed = 20;
+    public float speed = 10;
+    public float boosterSpeed = 20;
+
+    Vector3 dir;
     float yVelocity;
     int jumpCount;
     public int maxJumpCount = 2;
 
     CharacterController cc;
-    public TongTong bodyTongTong;
-
+    public Transform body;
     public Transform goalZone;
 
     bool isFreeze = false;
     float currentTime;
-    public float freezeTime = 3;
+    float boosterTime = 1;
+    public float freezeTime = 5;
     PlayerHP php;
+    public float playerHPValue;
     AngerHP pahp;
+    public GameObject teleportFactory;
+    public GameObject boosterFactory;
 
     void Start()
     {
+        theAudioManager = AudioManager.instance;
         cc = GetComponent<CharacterController>();
         php = this.gameObject.GetComponent<PlayerHP>();
         pahp = this.gameObject.GetComponent<AngerHP>();
+        state = State.Idle;
     }
 
 
-    // Update is called once per frame
     void Update()
     {
-        UpdateRotate();
-        UpdateMove();
+        if (GameManager.instance.gState != GameManager.GameState.Run)
+        {
+            return;
+        }
+
+        if (state == State.Dancing)
+        {
+            TestGoGoalZone();
+        }
+        else
+        {
+            UpdateRotate();
+            UpdateMove();
+        }
     }
 
     public float rotSpeed = 1;
@@ -71,6 +83,7 @@ public class player : MonoBehaviour
             transform.Rotate(Vector3.up, rotSpeed * 150 * Time.deltaTime);
         }
     }
+
 
     void UpdateMove()
     {
@@ -93,32 +106,40 @@ public class player : MonoBehaviour
             if (currentTime > freezeTime)
             {
                 // 체력을 만땅채우고싶다.
-                php.HP = php.maxHP;
+
+                php.HP = PlayerHP.instance.maxHP;
                 // Freeze상태를 끝내고싶다. 
                 isFreeze = false;
+                ani.SetTrigger("Run");
             }
             // 함수를 바로 종료하고싶다.
         }
 
-        // 점프 개수가 최대점프개수보다 적고 점프키를 눌렀다면
+
+        //점프 개수가 최대점프개수보다 적고 점프키를 눌렀다면
         if (false == isFreeze && jumpCount < maxJumpCount && Input.GetButtonDown("Jump"))
         {
-            // 한번 더 점프한다.
-            yVelocity = jumpPower;
             jumpCount++;
-       
-            // 점프를 1번할 때마다 체력이 1 감소하고 싶다.
-            php.HP--;
-            // 만약 플레이어의 체력이 0이하라면
+            yVelocity = jumpPower;
+
+            // 점프하는 애니메이션 작동한다.
+            ani.SetTrigger("Jumping");
+            theAudioManager.PlaySFX("Jump");
+
+            // 점프를 1번할 때마다 체력이 0.1 감소하고 싶다.
+            php.HP = php.HP - 0.1f;
+            // ★ 만약 플레이어의 체력이 0이하라면 FreezeTime동안 숨을 헐떡거린다. ★
             if (php.HP <= 0)
             {
-                // Freeze 상태가 되게한다.
+                state = State.InjuredIdle;
+                ani.SetTrigger("InjuredIdle");
+                theAudioManager.PlaySFX("InjuredIdle");
+
                 isFreeze = true;
                 currentTime = 0;
             }
         }
 
-       
         //사용자의 입력에 따라 상하좌우로 움직인다.
         float h = 0;
         float v = 0;
@@ -127,39 +148,80 @@ public class player : MonoBehaviour
             h = Input.GetAxis("Horizontal");
             v = Input.GetAxis("Vertical");
         }
-        // 땅 위에 있고 W키(혹은 ArrowUp키)를 누르고 있다면
-        if (cc.isGrounded && Input.anyKey && (v != 0 || h != 0)) // W키 혹은 ArrowUp키를 누르고있다면
-        {
-            // 통통거리며 움직인다.
-            bodyTongTong.Jump();
-        }
-        else
-        {
-            bodyTongTong.CancelJump();
-        }
+
+        ani.SetFloat("h", h);
+        ani.SetFloat("v", v);
 
         // 상하좌우로 방향을 만들고
         Vector3 dir = new Vector3(h, 0, v);
         dir = transform.TransformDirection(dir);
         // dir의 크기를 1로 만들어야 한다
+        dir.y = 0;
+
         dir.Normalize();
-        dir.y = yVelocity;
+
+        // 키입력이 있고 방향이 존재할때
+        if (Input.anyKey && (h != 0 || v != 0))
+        {
+            // 몸의 앞방향을 이동방향과 일치시키고싶다.
+            body.forward = dir;
+        }
+
+        Vector3 velocity = dir * speed;
+        velocity.y = yVelocity;
         // 그 방향으로 이동하고 싶다.
-        cc.Move(dir * speed * Time.deltaTime);
+        //cc.Move(dir * speed * Time.deltaTime);
 
+        if (CARPET != null)
+        {
+            cc.Move((CARPET.velocity + velocity) * Time.deltaTime);
+        }
+        else
+        {
+            cc.Move(velocity * Time.deltaTime);
+        }
 
+        if (pahp.ANGRYHP >= pahp.maxANGRYHP)
+        {
+            boosterVFX();
+            cc.Move(dir * boosterSpeed * Time.deltaTime);
+
+            currentTime += Time.deltaTime;
+            if (currentTime > boosterTime)
+            {
+                currentTime = 0;
+                pahp.ANGRYHP = 0;
+                cc.Move(dir * speed * Time.deltaTime);
+                state = State.Run;
+                ani.SetTrigger("Run");
+            }
+        }
+        Cheat();
         TestGoGoalZone();
     }
 
-    private void OnCollisionEnter(Collision collision)
+    CarperMove CARPET;
+
+    public void boosterVFX(float time = 0.3f)
     {
-        if (collision.gameObject.name.Contains("geine"))
+        GameObject bst = Instantiate(boosterFactory);
+        bst.transform.position = transform.position;
+        theAudioManager.PlaySFX("Booster");
+    }
+
+
+    public Transform aBox;
+    private void Cheat()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha9))
         {
-            pahp.ANGERHP++;
+            cc.enabled = false;
+            transform.position = aBox.position + Vector3.up * 2;
+            cc.enabled = true;
         }
     }
 
-    
+
     private void TestGoGoalZone()
     {
         if (Input.GetKeyDown(KeyCode.Alpha0))
@@ -167,11 +229,107 @@ public class player : MonoBehaviour
             cc.enabled = false;
             transform.position = goalZone.position + Vector3.up * 3;
             cc.enabled = true;
+            state = State.Dancing;
+            ani.SetTrigger("Dancing");
+            theAudioManager.PlaySFX("GoalVoice");
+            theAudioManager.PlayGoalBGM();
         }
+    }
+
+
+    // 감지충돌
+    private void OnTriggerEnter(Collider other)
+    {
+        print("OnTriggerEnter");
+        // 만약 부딪힌 녀석의 이름에 carpet가 포함되어있다면
+        if (other.gameObject.name.Contains("Debris"))
+        {
+            pahp.ANGRYHP = pahp.ANGRYHP + 0.1f;
+            state = State.ReactBackwards;
+            ani.SetTrigger("ReactBackwards");
+            CameraShake.instance.Shake(0.5f, 0.2f);
+            theAudioManager.PlaySFX("Damage");
+        }
+        else if (other.gameObject.name.Contains("DebrisWall"))
+        {
+            pahp.ANGRYHP = pahp.ANGRYHP + 0.1f;
+            state = State.ReactBackwards;
+            ani.SetTrigger("ReactBackwards");
+            CameraShake.instance.Shake(0.5f, 0.2f);
+            theAudioManager.PlaySFX("Damage");
+        }
+
+        else if (other.gameObject.name.Contains("carpet"))
+        {
+            CarperMove cm = other.attachedRigidbody.gameObject.GetComponent<CarperMove>();
+            if (cm != null)
+            {
+                cm.isPlaying = true;
+                theAudioManager.PlaySFX("CarpetMove");
+                if (CARPET == null)
+                {
+                    CARPET = cm;
+                }
+            }
+        }
+        // 그렇지않고 부딪힌 녀석의 이름에 tramperin이 포함되어 있다면
+        else if (other.gameObject.name.Contains("tramperlin"))
+        {
+            // 위로 이동하고싶다
+            yVelocity = jumpPower * 1.8f;
+            // 점프행위를 막고싶다.
+            jumpCount = maxJumpCount;
+            theAudioManager.PlaySFX("TramperlinJump");
+
+        }
+        else if (other.gameObject.name.Contains("GoalZone"))
+        {
+            state = State.Dancing;
+            ani.SetTrigger("Dancing");
+            theAudioManager.PlaySFX("GoalVoice");
+            theAudioManager.PlayGoalBGM();
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.gameObject.name.Contains("geine"))
+        {
+            pahp.ANGRYHP = pahp.ANGRYHP + 0.1f;
+            state = State.ReactBackwards;
+            ani.SetTrigger("ReactBackwards");
+            CameraShake.instance.Shake(0.5f, 0.2f);
+            theAudioManager.PlaySFX("Damage");
+        }
+        else if (collision.gameObject.name.Contains("bluebox"))
+        {
+            pahp.ANGRYHP = pahp.ANGRYHP + 0.1f;
+            state = State.ReactBackwards;
+            ani.SetTrigger("ReactBackwards");
+            CameraShake.instance.Shake(0.5f, 0.2f);
+            theAudioManager.PlaySFX("Damage");
+        }
+    }
+
+
+    private void OnTriggerExit(Collider other)
+    {
+        print("OnTriggerExit");
+
+        if (CARPET != null && CARPET == other.attachedRigidbody.gameObject.GetComponent<CarperMove>())
+        {
+            //내리고 싶다.
+            CARPET = null;
+        }
+    }
+
+    public void MakeTeleportVFX()
+    {
+        GameObject tlp = Instantiate(teleportFactory);
+        tlp.transform.position = transform.position;
+        theAudioManager.PlaySFX("Teleport");
     }
 }
 
-/* 순간이동 하는 코드(캐릭터 컨트롤러 끄고 코드가 작동되어야 함)
-        cc.enabled = false;   // componenet의 체크박스 끄는 방법이 enabled
-        transform.position = Vector3.zero;
-        cc.enabled = true;   */
+
+

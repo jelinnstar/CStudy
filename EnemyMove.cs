@@ -16,13 +16,15 @@ public class EnemyMove : MonoBehaviour
     public GameObject Box;
     public GameObject Box2;
     public GameObject Box3;
+    public GameObject Box4;
     public GameObject startwall;
     public GameObject endwall;
     public GameObject startwall2;
     public GameObject endwall2;
     public GameObject startwall3;
     public GameObject endwall3;
-
+    public GameObject startwall4;
+    public GameObject endwall4;
 
     public float speed = 1;
     public AnimationCurve curve;
@@ -33,10 +35,11 @@ void Update()
     {
         currentTime += Time.deltaTime * speed;
         float t = curve.Evaluate(currentTime);
-        print(t);
+        //print(t);
         Box.transform.localPosition = Vector3.Lerp(startwall.transform.localPosition, endwall.transform.localPosition, t);
         Box2.transform.localPosition = Vector3.Lerp(startwall2.transform.localPosition, endwall2.transform.localPosition, t);
         Box3.transform.localPosition = Vector3.Lerp(startwall3.transform.localPosition, endwall3.transform.localPosition, t);
+        Box4.transform.localPosition = Vector3.Lerp(startwall4.transform.localPosition, endwall4.transform.localPosition, t);
 
 
     }
