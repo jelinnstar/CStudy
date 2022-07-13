@@ -7,7 +7,7 @@ public class GeineMove : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+       
     }
 
     //지니가 좌우로 움직이게 하고 싶다
@@ -17,6 +17,7 @@ public class GeineMove : MonoBehaviour
     public float speed = 1;
     public AnimationCurve curve;
     float currentTime;
+    
 
     float rotspeed = 50f;
     // Update is called once per frame
@@ -29,6 +30,8 @@ public class GeineMove : MonoBehaviour
         geine.transform.localPosition = Vector3.Lerp(startpoint.transform.localPosition, endpoint.transform.localPosition, t);
 
     }
+
+   
 
     private void OnTriggerEnter(Collider other)
     {
